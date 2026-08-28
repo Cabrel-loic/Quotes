@@ -22,6 +22,8 @@ export function QuoteCard({ quote, animation, animationKey }: QuoteCardProps) {
   const markX = useTransform(smoothX, [-0.5, 0.5], [-12, 12]);
   const authorX = useTransform(smoothX, [-0.5, 0.5], [-3, 3]);
 
+  if (!quote) return <QuoteLoadingState />;
+
   return (
     <motion.blockquote
       key={animationKey}
@@ -39,11 +41,22 @@ export function QuoteCard({ quote, animation, animationKey }: QuoteCardProps) {
       onPointerLeave={() => { pointerX.set(0); pointerY.set(0); }}
     >
       <motion.span className="quote-mark" aria-hidden="true" style={reduceMotion ? undefined : { x: markX }}>“</motion.span>
-      <motion.p className="quote-text" style={reduceMotion ? undefined : { x: textX, y: textY }}>{quote?.text ?? "Fetching today’s quote…"}</motion.p>
+      <motion.p className="quote-text" style={reduceMotion ? undefined : { x: textX, y: textY }}>{quote.text}</motion.p>
       <motion.footer className="quote-author" style={reduceMotion ? undefined : { x: authorX }}>
         <span aria-hidden="true" />
-        <cite>{quote?.author ?? ""}</cite>
+        <cite>{quote.author}</cite>
       </motion.footer>
     </motion.blockquote>
+  );
+}
+
+function QuoteLoadingState() {
+  return (
+    <motion.div className="quote-card quote-loading" role="status" aria-label="Preparing today’s quote" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: .3 }}>
+      <span className="loading-emblem" aria-hidden="true"><i /><i /><i /></span>
+      <p>Opening today’s page</p>
+      <div className="quote-loading-lines" aria-hidden="true"><span /><span /><span /></div>
+      <small>A thought worth keeping is on its way.</small>
+    </motion.div>
   );
 }

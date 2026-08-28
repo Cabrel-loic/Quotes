@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { getDateChrome } from "@/lib/date";
 import type { AppearanceSettings, Quote, ThemeName } from "@/types/quote";
@@ -11,6 +11,12 @@ const presets = {
   story: { label: "Story · 2160 × 3840", width: 2160, height: 3840 },
   desktop: { label: "4K desktop · 3840 × 2160", width: 3840, height: 2160 },
 };
+
+const fileFormats = {
+  png: { label: "PNG · lossless", mime: "image/png", extension: "png", quality: 1 },
+  jpeg: { label: "JPEG · smaller file", mime: "image/jpeg", extension: "jpg", quality: 0.94 },
+  webp: { label: "WebP · best compression", mime: "image/webp", extension: "webp", quality: 0.94 },
+} as const;
 
 const palettes: Record<ThemeName, { bg: string; bg2: string; text: string; soft: string; glow: string; accent: string }> = {
   ink: { bg: "#14231c", bg2: "#293a2e", text: "#e9e4d6", soft: "#b9c2b6", glow: "#54725b", accent: "#b08d57" },
@@ -23,31 +29,47 @@ const palettes: Record<ThemeName, { bg: string; bg2: string; text: string; soft:
   skyline: { bg: "#b9cedc", bg2: "#e9f2f8", text: "#263640", soft: "#62737d", glow: "#f8fcff", accent: "#4f8e80" },
 };
 
-export function ExportPanel({ open, quote, settings, onClose }: { open: boolean; quote: Quote | null; settings: AppearanceSettings; onClose: () => void }) {
+export function ExportPanel({ open, quote, settings, capturedBackground, onClose }: { open: boolean; quote: Quote | null; settings: AppearanceSettings; capturedBackground: string | null; onClose: () => void }) {
   const [preset, setPreset] = useState<keyof typeof presets>("portrait");
+  const [fileFormat, setFileFormat] = useState<keyof typeof fileFormats>("png");
   const [includeDate, setIncludeDate] = useState(true);
   const [includeMark, setIncludeMark] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [exportStatus, setExportStatus] = useState("");
+
+  useEffect(() => {
+    if (!open || !quote) return;
+    let cancelled = false;
+    const selected = presets[preset];
+    const scale = 760 / Math.max(selected.width, selected.height);
+    void renderExport(Math.round(selected.width * scale), Math.round(selected.height * scale), quote, settings, includeDate, includeMark, capturedBackground).then((canvas) => {
+      if (cancelled) return;
+      const nextUrl = canvas.toDataURL("image/png");
+      setPreviewUrl(nextUrl);
+    });
+    return () => { cancelled = true; };
+  }, [open, quote, settings, preset, includeDate, includeMark, capturedBackground]);
 
   async function download() {
     if (!quote) return;
     setExporting(true);
+    setExportStatus("");
     await document.fonts.ready;
     const { width, height } = presets[preset];
-    const canvas = document.createElement("canvas");
-    canvas.width = width; canvas.height = height;
-    const context = canvas.getContext("2d");
-    if (!context) return setExporting(false);
-    drawExport(context, width, height, quote, settings, includeDate, includeMark);
+    const canvas = await renderExport(width, height, quote, settings, includeDate, includeMark, capturedBackground);
+    const format = fileFormats[fileFormat];
     canvas.toBlob((blob) => {
       if (blob) {
+        const actualFormat = Object.values(fileFormats).find((item) => item.mime === blob.type) ?? fileFormats.png;
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
-        anchor.href = url; anchor.download = `daybook-${preset}-${Date.now()}.png`; anchor.click();
-        URL.revokeObjectURL(url);
+        anchor.href = url; anchor.download = `daybook-${preset}-${Date.now()}.${actualFormat.extension}`; anchor.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        setExportStatus(actualFormat.mime === format.mime ? `${format.label.split(" ·")[0]} downloaded.` : "This browser exported PNG because the selected format is unsupported.");
       }
       setExporting(false);
-    }, "image/png");
+    }, format.mime, format.quality);
   }
 
   return <AnimatePresence>{open ? <>
@@ -55,26 +77,35 @@ export function ExportPanel({ open, quote, settings, onClose }: { open: boolean;
     <motion.aside className="export-panel" initial={{ opacity: 0, y: 35, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 25, scale: 0.97 }} transition={{ type: "spring", stiffness: 250, damping: 27 }}>
       <header><div><p>Create a keepsake</p><h2>Download in HD</h2></div><button className="btn btn-circle btn-ghost" onClick={onClose}>×</button></header>
       <div className="export-content">
-        <label><span className="setting-label">Format</span><select className="select w-full" value={preset} onChange={(event) => setPreset(event.target.value as keyof typeof presets)}>{Object.entries(presets).map(([value, item]) => <option key={value} value={value}>{item.label}</option>)}</select></label>
+        <label><span className="setting-label">Canvas size</span><select className="select w-full" value={preset} onChange={(event) => setPreset(event.target.value as keyof typeof presets)}>{Object.entries(presets).map(([value, item]) => <option key={value} value={value}>{item.label}</option>)}</select></label>
+        <label><span className="setting-label">File format</span><select className="select w-full" value={fileFormat} onChange={(event) => setFileFormat(event.target.value as keyof typeof fileFormats)}>{Object.entries(fileFormats).map(([value, item]) => <option key={value} value={value}>{item.label}</option>)}</select></label>
         <label className="export-check"><input className="checkbox checkbox-sm" type="checkbox" checked={includeDate} onChange={(event) => setIncludeDate(event.target.checked)} /> Include date</label>
         <label className="export-check"><input className="checkbox checkbox-sm" type="checkbox" checked={includeMark} onChange={(event) => setIncludeMark(event.target.checked)} /> Include quotation mark</label>
-        <div className="export-preview" style={{ background: `linear-gradient(145deg, ${palettes[settings.theme].bg}, ${palettes[settings.theme].bg2})`, color: palettes[settings.theme].text }}><span>“</span><p>{quote?.text}</p><small>— {quote?.author}</small></div>
-        <motion.button whileHover={{ y: -3, scale: 1.02 }} whileTap={{ scale: 0.97 }} className="btn export-button" disabled={!quote || exporting} onClick={download}>{exporting ? "Rendering HD image…" : "Download PNG"}</motion.button>
-        <small className="export-note">Generated privately in your browser. Nothing is uploaded.</small>
+        <div className="export-preview" style={{ aspectRatio: `${presets[preset].width}/${presets[preset].height}` }}>{previewUrl ? <img /* eslint-disable-line @next/next/no-img-element */ src={previewUrl} alt="Preview of the captured quote image" /> : <span className="loading loading-spinner" />}</div>
+        <motion.button whileHover={{ y: -3, scale: 1.02 }} whileTap={{ scale: 0.97 }} className="btn export-button" disabled={!quote || exporting} onClick={download}>{exporting ? "Rendering HD image…" : `Download ${fileFormats[fileFormat].label.split(" ·")[0]}`}</motion.button>
+        <small className="export-note">{exportStatus || "Live background captured at the instant you opened this preview. Nothing is uploaded."}</small>
       </div>
     </motion.aside>
   </> : null}</AnimatePresence>;
 }
 
-function drawExport(ctx: CanvasRenderingContext2D, width: number, height: number, quote: Quote, settings: AppearanceSettings, includeDate: boolean, includeMark: boolean) {
+async function renderExport(width: number, height: number, quote: Quote, settings: AppearanceSettings, includeDate: boolean, includeMark: boolean, capturedBackground: string | null) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width; canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Canvas rendering is unavailable");
+  const background = capturedBackground ? await loadImage(capturedBackground).catch(() => null) : null;
+  drawExport(context, width, height, quote, settings, includeDate, includeMark, background);
+  return canvas;
+}
+
+function drawExport(ctx: CanvasRenderingContext2D, width: number, height: number, quote: Quote, settings: AppearanceSettings, includeDate: boolean, includeMark: boolean, background: HTMLImageElement | null) {
   const palette = { ...palettes[settings.theme], accent: settings.accent || palettes[settings.theme].accent };
-  const gradient = ctx.createLinearGradient(0, 0, width, height);
-  gradient.addColorStop(0, palette.bg); gradient.addColorStop(1, palette.bg2);
-  ctx.fillStyle = gradient; ctx.fillRect(0, 0, width, height);
-  [[.18,.2,.48,palette.glow],[.82,.74,.55,palette.accent],[.5,.46,.42,palette.glow]].forEach(([x,y,r,color]) => {
-    const glow = ctx.createRadialGradient(Number(x)*width,Number(y)*height,0,Number(x)*width,Number(y)*height,Number(r)*Math.max(width,height));
-    glow.addColorStop(0, `${String(color)}88`); glow.addColorStop(1, `${String(color)}00`); ctx.fillStyle = glow; ctx.fillRect(0,0,width,height);
-  });
+  ctx.fillStyle = palette.bg; ctx.fillRect(0, 0, width, height);
+  if (background) drawImageCover(ctx, background, width, height);
+  else { const gradient = ctx.createLinearGradient(0, 0, width, height); gradient.addColorStop(0, palette.bg); gradient.addColorStop(1, palette.bg2); ctx.fillStyle = gradient; ctx.fillRect(0, 0, width, height); }
+  const shade = ctx.createRadialGradient(width / 2, height * .48, 0, width / 2, height * .48, Math.max(width, height) * .68);
+  shade.addColorStop(0, "#00000005"); shade.addColorStop(1, "#00000042"); ctx.fillStyle = shade; ctx.fillRect(0, 0, width, height);
   const unit = Math.min(width, height) / 100;
   ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.shadowColor = "#00000066"; ctx.shadowBlur = unit * 1.6;
   if (includeDate) { const date = getDateChrome(); ctx.font = `600 ${unit * 1.35}px Inter, sans-serif`; ctx.fillStyle = palette.soft; ctx.fillText(`${date.stamp}   ·   ${date.badge}`, width/2, height*.09); }
@@ -86,6 +117,19 @@ function drawExport(ctx: CanvasRenderingContext2D, width: number, height: number
   lines.forEach((line,index) => ctx.fillText(line,width/2,startY+index*lineHeight));
   ctx.shadowBlur = unit*.8; ctx.font = `600 ${unit * 1.5}px Inter, sans-serif`; ctx.fillStyle = palette.soft; ctx.fillText(`—  ${quote.author}`,width/2,startY+lines.length*lineHeight+unit*4.5);
   ctx.font = `600 ${unit}px Inter, sans-serif`; ctx.fillStyle = `${palette.soft}aa`; ctx.fillText("DAYBOOK",width/2,height*.93);
+}
+
+function drawImageCover(ctx: CanvasRenderingContext2D, image: HTMLImageElement, width: number, height: number) {
+  const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+  const sourceWidth = width / scale; const sourceHeight = height / scale;
+  const sourceX = (image.naturalWidth - sourceWidth) / 2; const sourceY = (image.naturalHeight - sourceHeight) / 2;
+  ctx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, width, height);
+}
+
+function loadImage(source: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image(); image.onload = () => resolve(image); image.onerror = reject; image.src = source;
+  });
 }
 
 function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {

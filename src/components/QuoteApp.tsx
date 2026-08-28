@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MotionConfig, motion, useReducedMotion, useScroll, useSpring, useTransform } from "motion/react";
 import { ExportPanel } from "@/components/ExportPanel";
 import { MeaningPanel } from "@/components/MeaningPanel";
-import { MotionBackground } from "@/components/MotionBackground";
+import { MotionBackground, type MotionBackgroundHandle } from "@/components/MotionBackground";
 import { QuoteActions } from "@/components/QuoteActions";
 import { QuoteCard } from "@/components/QuoteCard";
 import { SettingsDrawer } from "@/components/SettingsDrawer";
@@ -14,7 +14,8 @@ import { fetchDailyQuote, fetchRandomQuote } from "@/lib/quotes";
 import { readStorage, writeStorage } from "@/lib/storage";
 import type { AppearanceSettings, Quote, QuoteMeaning } from "@/types/quote";
 
-const defaultSettings: AppearanceSettings = { theme: "ink", accent: "", fonts: "inkpaper", animation: "stamp", quoteSize: 24, atmosphere: 100, motion: 100, grain: 100 };
+const APPEARANCE_STORAGE_KEY = "appearance-settings:v2";
+const defaultSettings: AppearanceSettings = { theme: "harbor", accent: "", fonts: "inkpaper", animation: "stamp", backgroundAnimation: "harbor", quoteSize: 24, atmosphere: 115, motion: 100, grain: 100 };
 
 export function QuoteApp() {
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -22,6 +23,8 @@ export function QuoteApp() {
   const [settings, setSettings] = useState(defaultSettings);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [capturedBackground, setCapturedBackground] = useState<string | null>(null);
+  const backgroundRef = useRef<MotionBackgroundHandle>(null);
   const [meaningOpen, setMeaningOpen] = useState(false);
   const [aiMeaning, setAiMeaning] = useState<QuoteMeaning | null>(null);
   const [meaningLoading, setMeaningLoading] = useState(false);
@@ -40,7 +43,7 @@ export function QuoteApp() {
   const stageScale = useTransform(smoothScroll, [0, 1], [1, 0.975]);
 
   useEffect(() => {
-    const saved = readStorage<Partial<AppearanceSettings>>("appearance-settings");
+    const saved = readStorage<Partial<AppearanceSettings>>(APPEARANCE_STORAGE_KEY);
     const key = `daily-quote:${todayKey()}`;
     const cached = readStorage<Quote>(key);
     if (saved || cached) queueMicrotask(() => {
@@ -62,7 +65,7 @@ export function QuoteApp() {
     root.style.setProperty("--motion", String(settings.motion / 100)); root.style.setProperty("--grain", String(settings.grain / 100));
     if (settings.accent) root.style.setProperty("--accent", settings.accent);
     else root.style.removeProperty("--accent");
-    writeStorage("appearance-settings", settings);
+    writeStorage(APPEARANCE_STORAGE_KEY, settings);
   }, [settings]);
 
   useEffect(() => {
@@ -115,12 +118,16 @@ export function QuoteApp() {
     }
   }
   function updateSettings(next: AppearanceSettings) { setSettings(next); if (next.animation !== settings.animation) setAnimationKey((key) => key + 1); }
+  function openExport() {
+    setCapturedBackground(backgroundRef.current?.capture() ?? null);
+    setExportOpen(true);
+  }
 
   return (
     <MotionConfig reducedMotion="user" transition={{ type: "spring", stiffness: 280, damping: 25 }}>
     <div className="daybook-shell" data-rendered="true">
       <div className="ambient-background" aria-hidden="true">
-        <MotionBackground />
+        <MotionBackground ref={backgroundRef} animation={settings.backgroundAnimation} />
         <span className="ambient-orb orb-one" /><span className="ambient-orb orb-two" /><span className="ambient-orb orb-three" />
         <span className="ambient-line line-one" /><span className="ambient-line line-two" /><span className="ambient-grain" />
       </div>
@@ -130,12 +137,12 @@ export function QuoteApp() {
       <motion.section className="quote-stage" style={reduceMotion ? undefined : { y: stageY, scale: stageScale }}>
         <header className="date-row"><span>{dateChrome.stamp}</span><span>{dateChrome.badge}</span></header>
         <QuoteCard quote={quote} animation={settings.animation} animationKey={animationKey} />
-        <QuoteActions isLoading={isLoading} isRandom={isRandom} meaningOpen={meaningOpen} onAnother={handleAnother} onToday={handleToday} onCopy={handleCopy} onExport={() => setExportOpen(true)} onMeaning={handleMeaning} />
+        <QuoteActions isLoading={isLoading} isRandom={isRandom} meaningOpen={meaningOpen} onAnother={handleAnother} onToday={handleToday} onCopy={handleCopy} onExport={openExport} onMeaning={handleMeaning} />
         <MeaningPanel meaning={meaning} open={meaningOpen} loading={meaningLoading} source={meaningSource} />
         <p className="status-message" role="status" aria-live="polite">{status}</p>
       </motion.section>
       <SettingsDrawer open={drawerOpen} settings={settings} onClose={() => setDrawerOpen(false)} onChange={updateSettings} onReset={() => { setSettings(defaultSettings); setStatus("Appearance reset to default."); }} />
-      <ExportPanel open={exportOpen} quote={quote} settings={settings} onClose={() => setExportOpen(false)} />
+      <ExportPanel open={exportOpen} quote={quote} settings={settings} capturedBackground={capturedBackground} onClose={() => setExportOpen(false)} />
     </div>
     </MotionConfig>
   );

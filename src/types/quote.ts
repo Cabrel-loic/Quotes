@@ -33,12 +33,14 @@ export type FontPairing =
   | "modernist";
 
 export type EntranceAnimation = "stamp" | "fade" | "slide" | "typewriter";
+export type BackgroundAnimation = "harbor" | "aurora" | "constellation" | "embers";
 
 export interface AppearanceSettings {
   theme: ThemeName;
   accent: string;
   fonts: FontPairing;
   animation: EntranceAnimation;
+  backgroundAnimation: BackgroundAnimation;
   quoteSize: number;
   atmosphere: number;
   motion: number;

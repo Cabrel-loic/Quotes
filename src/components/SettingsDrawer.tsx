@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { ThemePicker } from "@/components/ThemePicker";
-import type { AppearanceSettings, EntranceAnimation, FontPairing, ThemeName } from "@/types/quote";
+import type { AppearanceSettings, BackgroundAnimation, EntranceAnimation, FontPairing, ThemeName } from "@/types/quote";
 
 interface SettingsDrawerProps {
   open: boolean;
@@ -26,6 +26,13 @@ const animations: { value: EntranceAnimation; label: string }[] = [
   { value: "fade", label: "Soft fade" },
   { value: "slide", label: "Slide up" },
   { value: "typewriter", label: "Typewriter" },
+];
+
+const backgroundAnimations: { value: BackgroundAnimation; label: string; description: string }[] = [
+  { value: "harbor", label: "Harbor", description: "Deep tidal currents" },
+  { value: "aurora", label: "Aurora", description: "Luminous drifting veils" },
+  { value: "constellation", label: "Constellation", description: "Star fields and orbit lines" },
+  { value: "embers", label: "Embers", description: "Rising sparks and warm eddies" },
 ];
 
 export function SettingsDrawer({ open, settings, onClose, onChange, onReset }: SettingsDrawerProps) {
@@ -74,6 +81,13 @@ export function SettingsDrawer({ open, settings, onClose, onChange, onReset }: S
           <motion.div variants={drawerItem}><RangeField label="Quote text size" value={settings.quoteSize} min={18} max={34} suffix="px" onChange={(value) => update("quoteSize", value)} /></motion.div>
           <motion.div variants={drawerItem} className="atmosphere-group">
             <p className="setting-label">Background atmosphere</p>
+            <div className="background-animation-grid">
+              {backgroundAnimations.map((item) => (
+                <button key={item.value} type="button" aria-pressed={settings.backgroundAnimation === item.value} onClick={() => update("backgroundAnimation", item.value)}>
+                  <span>{item.label}</span><small>{item.description}</small>
+                </button>
+              ))}
+            </div>
             <RangeField label="Intensity" value={settings.atmosphere} min={30} max={140} onChange={(value) => update("atmosphere", value)} />
             <RangeField label="Motion" value={settings.motion} min={0} max={140} onChange={(value) => update("motion", value)} />
             <RangeField label="Grain" value={settings.grain} min={0} max={160} onChange={(value) => update("grain", value)} />
