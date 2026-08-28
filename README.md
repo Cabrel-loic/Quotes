@@ -11,15 +11,16 @@ The project is a ground-up rebuild of an earlier single-file `daily-quote.html` 
 - Curated offline fallback quotes
 - Random quote fetching with a return-to-today action
 - Clipboard copying with animated confirmation
-- A local meaning engine that produces:
+- Groq-powered AI interpretations with a local fallback that produces:
   - a simple interpretation
   - a deeper interpretation
   - a reflection question
-- Eight visual themes
+- Eight visual themes, with Harbor as the first-run default
 - Custom accent color
 - Multiple typeface pairings
 - Adjustable quote size
-- Adjustable atmosphere and motion intensity
+- Four selectable procedural atmospheres: Harbor, Aurora, Constellation, and Embers
+- Harbor motion is the default, with adjustable atmosphere and motion intensity
 - Persistent appearance preferences
 - Motion-sensitive, magnetic action controls
 - Quote tilt and layered pointer parallax
@@ -27,11 +28,12 @@ The project is a ground-up rebuild of an earlier single-file `daily-quote.html` 
 - GPU-rendered Three.js background with:
   - flowing shader fields
   - luminous particles
-  - pointer displacement
+  - a bright, theme-aware cursor wake that traces pointer movement
   - click-generated light rings
   - animated theme color transitions
 - Reduced-motion and WebGL fallbacks
-- Private, browser-only HD PNG export
+- Instant live-background capture with an accurate export preview
+- Private HD export in PNG, JPEG, or WebP
 - Responsive desktop and mobile layouts
 
 ## Technology
@@ -60,6 +62,18 @@ pnpm install
 ```
 
 The workspace explicitly allows the `unrs-resolver` installation script in `pnpm-workspace.yaml`. This is required by the current dependency toolchain.
+
+Copy the environment template and add a free Groq API key:
+
+```bash
+cp .env.example .env.local
+```
+
+```text
+GROQ_API_KEY=your_groq_api_key_here
+```
+
+Create a key in the [Groq Console](https://console.groq.com/keys). The key is read only by the `/api/meaning` Route Handler and must never be prefixed with `NEXT_PUBLIC_`.
 
 ### Run locally
 
@@ -124,7 +138,11 @@ If DummyJSON is unavailable, Daybook selects a deterministic quote from the bund
 
 ## Meaning engine
 
-The interpretation feature runs entirely in the browser and does not call an AI service. It uses:
+The interpretation feature sends the quote and author to the server-only `/api/meaning` Route Handler. The handler requests a strict JSON-schema response from Groq using `openai/gpt-oss-20b`, validates the output, and returns only the four display fields.
+
+Successful interpretations are cached in the browser by quote and author. Repeat views therefore do not consume additional Groq requests.
+
+If Groq is unconfigured, unavailable, rate-limited, or times out, Daybook automatically uses the bundled local engine:
 
 1. Exact interpretations for selected well-known quotes.
 2. Keyword scoring against bundled meaning themes.
@@ -134,12 +152,13 @@ The output is intended as a thoughtful reading prompt rather than an authoritati
 
 ## Appearance persistence
 
-Appearance preferences are saved under `appearance-settings` in `localStorage`. The persisted settings include:
+Appearance preferences are saved under the versioned `appearance-settings:v2` key in `localStorage`. Harbor is used on first run; changes made afterward persist normally. The persisted settings include:
 
 - theme
 - custom accent color
 - typeface pairing
 - entrance animation
+- procedural background animation
 - quote size
 - background intensity
 - background motion
@@ -165,20 +184,20 @@ The WebGL animation loop also pauses when the document is hidden.
 
 ## HD export
 
-The Download HD panel creates a new high-resolution canvas rather than enlarging a screenshot of the page. Available presets include:
+Opening Download HD freezes the current WebGL background frame—including its exact procedural pattern and cursor wake—and uses it for both the preview and final high-resolution render. Available presets include:
 
 - Portrait: 2160 × 2700
 - Square: 2160 × 2160
 - Story: 2160 × 3840
 - 4K desktop: 3840 × 2160
 
-Users can include or remove the date and quotation mark. The selected theme, accent color, quote, and author are rendered into a PNG locally.
+Users can include or remove the date and quotation mark, then export PNG, JPEG, or WebP. The selected canvas size and file format are encoded independently, with matching MIME types and filename extensions.
 
 No export data is uploaded, and no backend is required.
 
 ## External services and privacy
 
-The only runtime network request made by the app is to DummyJSON for quote content. Settings, meanings, clipboard actions, motion, and image export all run locally in the browser.
+Runtime network requests are made to DummyJSON for quote content and, when configured, to Groq through Daybook’s server-only Route Handler. The Groq API key is never sent to the browser. Settings, cached meanings, clipboard actions, motion, and image export remain local.
 
 ## Future directions
 

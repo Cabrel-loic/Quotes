@@ -137,7 +137,8 @@ export function MotionBackground() {
       const particles = new THREE.Points(particlesGeometry, particlesMaterial);
       scene.add(particles);
 
-      const clock = new THREE.Clock();
+      const timer = new THREE.Timer();
+      timer.connect(document);
       const pointer = new THREE.Vector2();
       const smoothPointer = new THREE.Vector2();
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -153,7 +154,8 @@ export function MotionBackground() {
       const resize = () => renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
       const movePointer = (event: PointerEvent) => pointer.set((event.clientX / window.innerWidth - 0.5) * 2, (event.clientY / window.innerHeight - 0.5) * 2);
       const pulse = (event: PointerEvent) => uniforms.uRipple.value.set(event.clientX / window.innerWidth, 1 - event.clientY / window.innerHeight, uniforms.uTime.value);
-      const render = () => {
+      const render = (timestamp?: number) => {
+        timer.update(timestamp);
         const computed = getComputedStyle(document.documentElement);
         const motion = Number(computed.getPropertyValue("--motion")) || 0;
         smoothPointer.lerp(pointer, 0.035);
@@ -162,7 +164,7 @@ export function MotionBackground() {
         uniforms.uGlow.value.lerp(targets.glow, 0.025); uniforms.uAccent.value.lerp(targets.accent, 0.025);
         particlesMaterial.color.lerp(targets.accent, 0.035);
         uniforms.uIntensity.value += (targets.intensity - uniforms.uIntensity.value) * 0.04;
-        uniforms.uTime.value = clock.getElapsedTime() * Math.max(0.08, motion);
+        uniforms.uTime.value = timer.getElapsed() * Math.max(0.08, motion);
         particles.rotation.z = uniforms.uTime.value * 0.012;
         particles.rotation.x = smoothPointer.y * 0.035;
         particles.rotation.y = smoothPointer.x * 0.035;
@@ -187,7 +189,7 @@ export function MotionBackground() {
         renderer.setAnimationLoop(null); observer.disconnect();
         window.removeEventListener("resize", resize); window.removeEventListener("pointermove", movePointer); window.removeEventListener("pointerdown", pulse);
         document.removeEventListener("visibilitychange", syncLoop); reducedMotion.removeEventListener("change", syncLoop);
-        particlesGeometry.dispose(); particlesMaterial.dispose(); plane.geometry.dispose(); material.dispose(); renderer.dispose();
+        timer.dispose(); particlesGeometry.dispose(); particlesMaterial.dispose(); plane.geometry.dispose(); material.dispose(); renderer.dispose();
       };
     });
 
