@@ -1,0 +1,108 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { MotionConfig, motion, useReducedMotion, useScroll, useSpring, useTransform } from "motion/react";
+import { ExportPanel } from "@/components/ExportPanel";
+import { MeaningPanel } from "@/components/MeaningPanel";
+import { MotionBackground } from "@/components/MotionBackground";
+import { QuoteActions } from "@/components/QuoteActions";
+import { QuoteCard } from "@/components/QuoteCard";
+import { SettingsDrawer } from "@/components/SettingsDrawer";
+import { getDateChrome, todayKey } from "@/lib/date";
+import { buildMeaning } from "@/lib/meaning";
+import { fetchDailyQuote, fetchRandomQuote } from "@/lib/quotes";
+import { readStorage, writeStorage } from "@/lib/storage";
+import type { AppearanceSettings, Quote } from "@/types/quote";
+
+const defaultSettings: AppearanceSettings = { theme: "ink", accent: "", fonts: "inkpaper", animation: "stamp", quoteSize: 24, atmosphere: 100, motion: 100, grain: 100 };
+
+export function QuoteApp() {
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [dailyQuote, setDailyQuote] = useState<Quote | null>(null);
+  const [settings, setSettings] = useState(defaultSettings);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [meaningOpen, setMeaningOpen] = useState(false);
+  const [isRandom, setIsRandom] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [status, setStatus] = useState("");
+  const [animationKey, setAnimationKey] = useState(0);
+  const dateChrome = useMemo(() => getDateChrome(), []);
+  const meaning = useMemo(() => buildMeaning(quote ?? { text: "", author: "", source: "offline" }), [quote]);
+  const reduceMotion = useReducedMotion();
+  const { scrollYProgress } = useScroll();
+  const smoothScroll = useSpring(scrollYProgress, { stiffness: 120, damping: 25 });
+  const stageY = useTransform(smoothScroll, [0, 1], [0, -34]);
+  const stageScale = useTransform(smoothScroll, [0, 1], [1, 0.975]);
+
+  useEffect(() => {
+    const saved = readStorage<Partial<AppearanceSettings>>("appearance-settings");
+    const key = `daily-quote:${todayKey()}`;
+    const cached = readStorage<Quote>(key);
+    if (saved || cached) queueMicrotask(() => {
+      if (saved) setSettings({ ...defaultSettings, ...saved });
+      if (cached) { setDailyQuote(cached); setQuote(cached); }
+    });
+    if (cached) return;
+    void fetchDailyQuote().then((result) => {
+      setDailyQuote(result); setQuote(result); writeStorage(key, result);
+      if (result.source === "offline") setStatus("Showing an offline quote — network unavailable.");
+    });
+  }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.theme = settings.theme; root.dataset.fonts = settings.fonts;
+    root.style.setProperty("--quote-size", `${settings.quoteSize}px`);
+    root.style.setProperty("--atmosphere", String(settings.atmosphere / 100));
+    root.style.setProperty("--motion", String(settings.motion / 100)); root.style.setProperty("--grain", String(settings.grain / 100));
+    if (settings.accent) root.style.setProperty("--accent", settings.accent);
+    else root.style.removeProperty("--accent");
+    writeStorage("appearance-settings", settings);
+  }, [settings]);
+
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => event.key === "Escape" && setDrawerOpen(false);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [drawerOpen]);
+
+  function showQuote(nextQuote: Quote) { setQuote(nextQuote); setMeaningOpen(false); setAnimationKey((key) => key + 1); }
+  async function handleAnother() {
+    setIsLoading(true); setStatus("Fetching another quote…");
+    const nextQuote = await fetchRandomQuote(); showQuote(nextQuote); setIsRandom(true); setIsLoading(false);
+    setStatus(nextQuote.source === "offline" ? "Showing an offline quote — network unavailable." : "");
+  }
+  function handleToday() { if (dailyQuote) showQuote(dailyQuote); setIsRandom(false); setStatus(""); }
+  async function handleCopy() {
+    if (!quote) return;
+    try { await navigator.clipboard.writeText(`“${quote.text}” — ${quote.author}`); setStatus("Copied to clipboard."); }
+    catch { setStatus("Could not copy — select the text manually."); }
+  }
+  function updateSettings(next: AppearanceSettings) { setSettings(next); if (next.animation !== settings.animation) setAnimationKey((key) => key + 1); }
+
+  return (
+    <MotionConfig reducedMotion="user" transition={{ type: "spring", stiffness: 280, damping: 25 }}>
+    <div className="daybook-shell" data-rendered="true">
+      <div className="ambient-background" aria-hidden="true">
+        <MotionBackground />
+        <span className="ambient-orb orb-one" /><span className="ambient-orb orb-two" /><span className="ambient-orb orb-three" />
+        <span className="ambient-line line-one" /><span className="ambient-line line-two" /><span className="ambient-grain" />
+      </div>
+      <motion.button whileHover={{ rotate: 45, scale: 1.1 }} whileTap={{ scale: 0.9 }} className="settings-toggle btn btn-circle" aria-label="Open appearance settings" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(true)}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5v.2a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 1 1 4.3 17l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.7 7l-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1h.2a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1.1Z" /></svg>
+      </motion.button>
+      <motion.section className="quote-stage" style={reduceMotion ? undefined : { y: stageY, scale: stageScale }}>
+        <header className="date-row"><span>{dateChrome.stamp}</span><span>{dateChrome.badge}</span></header>
+        <QuoteCard quote={quote} animation={settings.animation} animationKey={animationKey} />
+        <QuoteActions isLoading={isLoading} isRandom={isRandom} meaningOpen={meaningOpen} onAnother={handleAnother} onToday={handleToday} onCopy={handleCopy} onExport={() => setExportOpen(true)} onMeaning={() => { setMeaningOpen((open) => !open); setStatus(!meaningOpen ? "Meaning added below the quote." : ""); }} />
+        <MeaningPanel meaning={meaning} open={meaningOpen} />
+        <p className="status-message" role="status" aria-live="polite">{status}</p>
+      </motion.section>
+      <SettingsDrawer open={drawerOpen} settings={settings} onClose={() => setDrawerOpen(false)} onChange={updateSettings} onReset={() => { setSettings(defaultSettings); setStatus("Appearance reset to default."); }} />
+      <ExportPanel open={exportOpen} quote={quote} settings={settings} onClose={() => setExportOpen(false)} />
+    </div>
+    </MotionConfig>
+  );
+}
