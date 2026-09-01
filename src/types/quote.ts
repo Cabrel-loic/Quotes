@@ -33,7 +33,9 @@ export type FontPairing =
   | "modernist";
 
 export type EntranceAnimation = "stamp" | "fade" | "slide" | "typewriter";
-export type BackgroundAnimation = "harbor" | "aurora" | "constellation" | "embers";
+export type BackgroundAnimation = "harbor" | "aurora" | "constellation" | "embers" | "topography";
+export type QuoteLayout = "immersive" | "editorial";
+export type GraphicsQuality = "auto" | "balanced" | "battery";
 
 export interface AppearanceSettings {
   theme: ThemeName;
@@ -45,4 +47,9 @@ export interface AppearanceSettings {
   atmosphere: number;
   motion: number;
   grain: number;
+  layout: QuoteLayout;
+  backgroundInteraction: boolean;
+  graphicsQuality: GraphicsQuality;
 }
+
+export type DaybookPreferences = AppearanceSettings;

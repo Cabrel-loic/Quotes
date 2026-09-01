@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { useDialog } from "@/hooks/useDialog";
 import { getDateChrome } from "@/lib/date";
 import type { AppearanceSettings, Quote, ThemeName } from "@/types/quote";
 
@@ -29,7 +30,9 @@ const palettes: Record<ThemeName, { bg: string; bg2: string; text: string; soft:
   skyline: { bg: "#b9cedc", bg2: "#e9f2f8", text: "#263640", soft: "#62737d", glow: "#f8fcff", accent: "#4f8e80" },
 };
 
-export function ExportPanel({ open, quote, settings, capturedBackground, onClose }: { open: boolean; quote: Quote | null; settings: AppearanceSettings; capturedBackground: string | null; onClose: () => void }) {
+export function ExportPanel({ open, quote, settings, capturedBackground, onClose, triggerRef }: { open: boolean; quote: Quote | null; settings: AppearanceSettings; capturedBackground: string | null; onClose: () => void; triggerRef?: React.RefObject<HTMLElement | null> }) {
+  const panelRef = useRef<HTMLElement>(null);
+  useDialog(open, panelRef, onClose, triggerRef);
   const [preset, setPreset] = useState<keyof typeof presets>("portrait");
   const [fileFormat, setFileFormat] = useState<keyof typeof fileFormats>("png");
   const [includeDate, setIncludeDate] = useState(true);
@@ -74,8 +77,8 @@ export function ExportPanel({ open, quote, settings, capturedBackground, onClose
 
   return <AnimatePresence>{open ? <>
     <motion.button className="drawer-backdrop is-open export-backdrop" aria-label="Close export panel" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
-    <motion.aside className="export-panel" initial={{ opacity: 0, y: 35, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 25, scale: 0.97 }} transition={{ type: "spring", stiffness: 250, damping: 27 }}>
-      <header><div><p>Create a keepsake</p><h2>Download in HD</h2></div><button className="btn btn-circle btn-ghost" onClick={onClose}>×</button></header>
+    <motion.aside ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="export-title" className="export-panel" initial={{ opacity: 0, y: 35, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 25, scale: 0.97 }} transition={{ type: "spring", stiffness: 250, damping: 27 }}>
+      <header><div><p>Create a keepsake</p><h2 id="export-title">Download in HD</h2></div><button className="btn btn-circle btn-ghost" aria-label="Close export panel" onClick={onClose}>×</button></header>
       <div className="export-content">
         <label><span className="setting-label">Canvas size</span><select className="select w-full" value={preset} onChange={(event) => setPreset(event.target.value as keyof typeof presets)}>{Object.entries(presets).map(([value, item]) => <option key={value} value={value}>{item.label}</option>)}</select></label>
         <label><span className="setting-label">File format</span><select className="select w-full" value={fileFormat} onChange={(event) => setFileFormat(event.target.value as keyof typeof fileFormats)}>{Object.entries(fileFormats).map(([value, item]) => <option key={value} value={value}>{item.label}</option>)}</select></label>
@@ -112,10 +115,22 @@ function drawExport(ctx: CanvasRenderingContext2D, width: number, height: number
   if (includeMark) { ctx.font = `600 ${unit * 9}px Georgia, serif`; ctx.fillStyle = palette.accent; ctx.fillText("“", width/2, height*.27); }
   const fontSize = Math.min(unit * 5.3, width / Math.max(12, quote.text.length * .3));
   ctx.font = `500 ${fontSize}px Georgia, serif`; ctx.fillStyle = palette.text;
-  const lines = wrapText(ctx, quote.text, width * .76);
+  const maxTextWidth = settings.layout === "editorial" ? width * .68 : width * .76;
+  const lines = wrapText(ctx, quote.text, maxTextWidth);
   const lineHeight = fontSize * 1.18; const startY = height*.49 - ((lines.length-1)*lineHeight)/2;
-  lines.forEach((line,index) => ctx.fillText(line,width/2,startY+index*lineHeight));
-  ctx.shadowBlur = unit*.8; ctx.font = `600 ${unit * 1.5}px Inter, sans-serif`; ctx.fillStyle = palette.soft; ctx.fillText(`—  ${quote.author}`,width/2,startY+lines.length*lineHeight+unit*4.5);
+  if (settings.layout === "editorial") {
+    ctx.textAlign = "left";
+    const left = width * .16;
+    ctx.fillStyle = palette.accent; ctx.fillRect(width * .1, height * .28, unit * .25, height * .42);
+    ctx.font = `700 ${unit * 1.05}px Inter, sans-serif`; ctx.fillText("DAYBOOK / DAILY THOUGHT", left, height * .18);
+    ctx.font = `500 ${fontSize}px Georgia, serif`; ctx.fillStyle = palette.text;
+    lines.forEach((line,index) => ctx.fillText(line, left, startY+index*lineHeight));
+    ctx.shadowBlur = unit*.8; ctx.font = `600 ${unit * 1.5}px Inter, sans-serif`; ctx.fillStyle = palette.soft; ctx.fillText(quote.author.toUpperCase(), left, startY+lines.length*lineHeight+unit*4.5);
+  } else {
+    lines.forEach((line,index) => ctx.fillText(line,width/2,startY+index*lineHeight));
+    ctx.shadowBlur = unit*.8; ctx.font = `600 ${unit * 1.5}px Inter, sans-serif`; ctx.fillStyle = palette.soft; ctx.fillText(`—  ${quote.author}`,width/2,startY+lines.length*lineHeight+unit*4.5);
+  }
+  ctx.textAlign = "center";
   ctx.font = `600 ${unit}px Inter, sans-serif`; ctx.fillStyle = `${palette.soft}aa`; ctx.fillText("DAYBOOK",width/2,height*.93);
 }
 

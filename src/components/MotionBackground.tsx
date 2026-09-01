@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
-import type { BackgroundAnimation } from "@/types/quote";
+import type { BackgroundAnimation, GraphicsQuality } from "@/types/quote";
 
 export interface MotionBackgroundHandle { capture: () => string | null }
 
@@ -80,7 +80,17 @@ const fragmentShader = /* glsl */ `
     folds *= sin((p.y - flow.x * 0.5) * 7.0 + t * 2.1) * 0.5 + 0.5;
 
     vec3 color = mix(uDepth, uBase, smoothstep(0.08, 0.9, field));
-    if (uMode == 1) {
+    if (uMode == 4) {
+      float elevation = field * 13.0 + flow.x * 1.8;
+      float contourDistance = abs(fract(elevation) - 0.5);
+      float contour = 1.0 - smoothstep(0.025, 0.075, contourDistance);
+      float majorDistance = abs(fract(elevation * 0.2) - 0.5);
+      float major = 1.0 - smoothstep(0.018, 0.055, majorDistance);
+      float pointerBend = exp(-distance(uv, uPointer * vec2(0.08, -0.06) + 0.5) * 5.0);
+      color = mix(uDepth, uBase, smoothstep(0.05, 0.95, field));
+      color = mix(color, uGlow, contour * (0.28 + pointerBend * 0.18) * uIntensity);
+      color = mix(color, uAccent, major * 0.42 * uIntensity);
+    } else if (uMode == 1) {
       float veil = pow(abs(sin((p.x + flow.y * 0.72) * 5.2 + t * 2.8)), 7.0);
       color = mix(color, uGlow, veil * 0.78 * uIntensity);
       color += uAccent * pow(max(0.0, 0.7 - abs(p.y + flow.x - 0.8)), 3.0) * 1.6;
@@ -125,9 +135,11 @@ function cssColor(styles: CSSStyleDeclaration, name: string, fallback: string) {
   return styles.getPropertyValue(name).trim() || fallback;
 }
 
-const modeIndex: Record<BackgroundAnimation, number> = { harbor: 0, aurora: 1, constellation: 2, embers: 3 };
+const modeIndex: Record<BackgroundAnimation, number> = { harbor: 0, aurora: 1, constellation: 2, embers: 3, topography: 4 };
 
-export const MotionBackground = forwardRef<MotionBackgroundHandle, { animation: BackgroundAnimation }>(function MotionBackground({ animation }, ref) {
+type MotionBackgroundProps = { animation: BackgroundAnimation; interaction: boolean; quality: GraphicsQuality };
+
+export const MotionBackground = forwardRef<MotionBackgroundHandle, MotionBackgroundProps>(function MotionBackground({ animation, interaction, quality }, ref) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const captureRef = useRef<() => string | null>(() => null);
   useImperativeHandle(ref, () => ({ capture: () => captureRef.current() }), []);
@@ -148,7 +160,10 @@ export const MotionBackground = forwardRef<MotionBackgroundHandle, { animation: 
         return;
       }
 
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
+      const touchDevice = window.matchMedia("(pointer: coarse)").matches;
+      const weakDevice = touchDevice || (navigator.hardwareConcurrency || 4) <= 4;
+      const qualityScale = quality === "battery" ? 0.8 : quality === "balanced" ? 1.1 : weakDevice ? 0.9 : 1.35;
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, qualityScale));
       renderer.setClearAlpha(0);
       const scene = new THREE.Scene();
       const camera = new THREE.Camera();
@@ -174,7 +189,8 @@ export const MotionBackground = forwardRef<MotionBackgroundHandle, { animation: 
       const plane = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
       scene.add(plane);
 
-      const particleCount = window.innerWidth < 700 ? 70 : 130;
+      const baseParticles = quality === "battery" ? 28 : weakDevice ? 48 : 90;
+      const particleCount = animation === "topography" ? Math.round(baseParticles * 0.22) : baseParticles;
       const positions = new Float32Array(particleCount * 3);
       for (let index = 0; index < particleCount; index++) {
         positions[index * 3] = THREE.MathUtils.randFloatSpread(12);
@@ -194,6 +210,7 @@ export const MotionBackground = forwardRef<MotionBackgroundHandle, { animation: 
       const trail = uniforms.uTrail.value;
       let lastTrailTime = 0;
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+      let motionAmount = 0.5;
 
       const syncTheme = () => {
         const computed = getComputedStyle(document.documentElement);
@@ -206,9 +223,11 @@ export const MotionBackground = forwardRef<MotionBackgroundHandle, { animation: 
         uniforms.uTrailColor.value.set(luminance > 0.52 ? "#102e3a" : "#f8f2d2").lerp(targets.accent, 0.28);
         targets.intensity = Number(computed.getPropertyValue("--atmosphere")) || 1;
         uniforms.uGrain.value = Number(computed.getPropertyValue("--grain")) || 0;
+        motionAmount = Number(computed.getPropertyValue("--motion")) || 0;
       };
       const resize = () => renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
       const movePointer = (event: PointerEvent) => {
+        if (!interaction || motionAmount === 0 || touchDevice) return;
         pointer.set((event.clientX / window.innerWidth - 0.5) * 2, (event.clientY / window.innerHeight - 0.5) * 2);
         const now = performance.now();
         if (now - lastTrailTime > 18) {
@@ -217,19 +236,21 @@ export const MotionBackground = forwardRef<MotionBackgroundHandle, { animation: 
           lastTrailTime = now;
         }
       };
-      const pulse = (event: PointerEvent) => uniforms.uRipple.value.set(event.clientX / window.innerWidth, 1 - event.clientY / window.innerHeight, uniforms.uTime.value);
+      const pulse = (event: PointerEvent) => {
+        if (!interaction || motionAmount === 0) return;
+        uniforms.uRipple.value.set(event.clientX / window.innerWidth, 1 - event.clientY / window.innerHeight, uniforms.uTime.value);
+      };
       const render = (timestamp?: number) => {
         timer.update(timestamp);
-        const computed = getComputedStyle(document.documentElement);
-        const motion = Number(computed.getPropertyValue("--motion")) || 0;
         smoothPointer.lerp(pointer, 0.035);
         uniforms.uPointer.value.copy(smoothPointer);
         uniforms.uBase.value.lerp(targets.base, 0.025); uniforms.uDepth.value.lerp(targets.depth, 0.025);
         uniforms.uGlow.value.lerp(targets.glow, 0.025); uniforms.uAccent.value.lerp(targets.accent, 0.025);
         particlesMaterial.color.lerp(targets.accent, 0.035);
         uniforms.uIntensity.value += (targets.intensity - uniforms.uIntensity.value) * 0.04;
-        uniforms.uTime.value = timer.getElapsed() * Math.max(0.08, motion);
-        for (const point of trail) point.z = Math.min(1, point.z + timer.getDelta() * 0.72);
+        uniforms.uTime.value = timer.getElapsed() * motionAmount;
+        const frameDelta = timer.getDelta();
+        for (const point of trail) point.z = Math.min(1, point.z + frameDelta * 0.72);
         particles.rotation.z = uniforms.uTime.value * 0.012;
         particles.rotation.x = smoothPointer.y * 0.035;
         particles.rotation.y = smoothPointer.x * 0.035;
@@ -241,12 +262,12 @@ export const MotionBackground = forwardRef<MotionBackgroundHandle, { animation: 
       };
       const syncLoop = () => {
         renderer.setAnimationLoop(null);
-        if (reducedMotion.matches || document.hidden) render();
+        if (reducedMotion.matches || document.hidden || motionAmount === 0) render();
         else renderer.setAnimationLoop(render);
       };
 
       syncTheme(); resize(); syncLoop();
-      const observer = new MutationObserver(syncTheme);
+      const observer = new MutationObserver(() => { syncTheme(); syncLoop(); });
       observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "style"] });
       window.addEventListener("resize", resize);
       window.addEventListener("pointermove", movePointer, { passive: true });
@@ -264,7 +285,7 @@ export const MotionBackground = forwardRef<MotionBackgroundHandle, { animation: 
     });
 
     return () => { disposed = true; cleanup(); };
-  }, [animation]);
+  }, [animation, interaction, quality]);
 
   return <canvas ref={canvasRef} className="motion-canvas" aria-hidden="true" />;
 });

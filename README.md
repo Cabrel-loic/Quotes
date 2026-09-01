@@ -19,12 +19,13 @@ The project is a ground-up rebuild of an earlier single-file `daily-quote.html` 
 - Custom accent color
 - Multiple typeface pairings
 - Adjustable quote size
-- Four selectable procedural atmospheres: Harbor, Aurora, Constellation, and Embers
+- Five selectable procedural atmospheres: Harbor, Aurora, Topography, Constellation, and Embers
+- Independent Immersive and Editorial quote layouts
 - Harbor motion is the default, with adjustable atmosphere and motion intensity
 - Persistent appearance preferences
-- Motion-sensitive, magnetic action controls
-- Quote tilt and layered pointer parallax
-- Animated meaning panel and settings drawer
+- Restrained, motion-sensitive action controls with a mobile priority bar
+- Length-aware quote typography and semantic word reveals
+- Scroll-native meaning chapter and accessible settings dialog/bottom sheet
 - GPU-rendered Three.js background with:
   - flowing shader fields
   - luminous particles
@@ -111,13 +112,13 @@ src/
 ├── components/
 │   ├── AppErrorBoundary.tsx Visible client-rendering fallback
 │   ├── ExportPanel.tsx      Browser-side HD PNG generation
-│   ├── MeaningPanel.tsx     Animated interpretation and reflection content
 │   ├── MotionBackground.tsx Three.js shader and particle scene
-│   ├── QuoteActions.tsx     Magnetic action controls
 │   ├── QuoteApp.tsx         Main client state and application orchestration
-│   ├── QuoteCard.tsx        Animated, pointer-reactive quote presentation
-│   ├── SettingsDrawer.tsx   Persistent appearance controls
-│   └── ThemePicker.tsx      Animated theme selection
+│   ├── backgrounds/         Scene presentation and ambient overlays
+│   ├── layouts/             Immersive and Editorial quote compositions
+│   ├── quote/               Quote, author, actions, loading, and meaning UI
+│   └── settings/            Responsive appearance settings surface
+├── hooks/                   Dialog, media query, and preference lifecycle
 ├── data/
 │   ├── fallbackQuotes.ts    Offline quote catalog
 │   └── meaningThemes.ts     Keyword-based interpretation themes
@@ -152,13 +153,16 @@ The output is intended as a thoughtful reading prompt rather than an authoritati
 
 ## Appearance persistence
 
-Appearance preferences are saved under the versioned `appearance-settings:v2` key in `localStorage`. Harbor is used on first run; changes made afterward persist normally. The persisted settings include:
+Appearance preferences are saved under the versioned `daybook-preferences:v3` key in `localStorage`. Existing v2 preferences migrate automatically. Harbor is used on first run; changes made afterward persist normally. The persisted settings include:
 
 - theme
+- quote layout
 - custom accent color
 - typeface pairing
 - entrance animation
 - procedural background animation
+- background interaction
+- adaptive graphics quality
 - quote size
 - background intensity
 - background motion
