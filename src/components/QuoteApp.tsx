@@ -46,6 +46,7 @@ export function QuoteApp() {
   const dateY = useTransform(smoothScroll, [0, .7], [0, -90]);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
   const closeExport = useCallback(() => setExportOpen(false), []);
+  const closeMeaning = useCallback(() => setMeaningOpen(false), []);
 
   useEffect(() => {
     const key = `daily-quote:${todayKey()}`;
@@ -108,7 +109,7 @@ export function QuoteApp() {
         </div>
         <button className="scroll-cue" onClick={() => document.getElementById("meaning-section")?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" })} aria-label={meaningOpen ? "Scroll to interpretation" : "Open the meaning to continue"} disabled={!meaningOpen}><span>Reflect</span><i /></button>
       </motion.section>
-      <MeaningExperience meaning={meaning} open={meaningOpen} loading={meaningLoading} source={meaningSource} />
+      <MeaningExperience meaning={meaning} open={meaningOpen} loading={meaningLoading} source={meaningSource} onClose={closeMeaning} />
       <SettingsDrawer open={settingsOpen} preferences={preferences} onClose={closeSettings} onChange={setPreferences} onReset={() => { resetPreferences(); setStatus("Daybook appearance reset."); }} triggerRef={settingsTriggerRef} />
       <ExportPanel open={exportOpen} quote={quote} settings={preferences} capturedBackground={capturedBackground} onClose={closeExport} />
     </main>

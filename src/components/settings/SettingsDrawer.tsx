@@ -16,7 +16,8 @@ const themes: Array<{ value: ThemeName; label: string; colors: string }> = [
 const scenes: Array<{ value: BackgroundAnimation; label: string; description: string }> = [
   { value: "harbor", label: "Harbor", description: "Tidal light" }, { value: "aurora", label: "Aurora", description: "Drifting veils" },
   { value: "topography", label: "Topography", description: "Living contours" }, { value: "constellation", label: "Constellation", description: "Quiet orbit" },
-  { value: "embers", label: "Embers", description: "Warm ascent" },
+  { value: "embers", label: "Embers", description: "Warm ascent" }, { value: "particleMorph", label: "Particle Morph", description: "Sphere · ring · helix" },
+  { value: "circleWave", label: "Circle Wave", description: "Fluid energy ring" },
 ];
 const fonts: Array<{ value: FontPairing; label: string }> = [
   { value: "inkpaper", label: "Literary" }, { value: "broadsheet", label: "Broadsheet" }, { value: "typewriter", label: "Typewriter" },

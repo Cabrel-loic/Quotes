@@ -27,6 +27,7 @@ const fragmentShader = /* glsl */ `
   uniform vec3 uAccent;
   uniform vec3 uTrailColor;
   uniform vec3 uTrail[18];
+  uniform vec2 uResolution;
   uniform int uMode;
 
   float hash(vec2 p) {
@@ -64,8 +65,57 @@ const fragmentShader = /* glsl */ `
     return min(glow, 1.7);
   }
 
+  vec3 circleWave(vec2 uv) {
+    float aspect = uResolution.x / max(1.0, uResolution.y);
+    vec2 point = (uv - 0.5) * 2.0;
+    point.x *= aspect;
+    float radius = length(point);
+    float angle = atan(point.y, point.x);
+    float phase = mod(uTime, 20.8) / 20.8;
+    float cycle = phase * 6.28318530718;
+    float baseRadius = 0.8 * min(1.0, aspect);
+    float breathing = sin(cycle) * 0.018 + sin(cycle * 2.0) * 0.007;
+    float turbulence = 0.5 - 0.5 * cos(cycle);
+    vec3 color = vec3(0.0);
+
+    for (int index = 0; index < 12; index++) {
+      float band = float(index);
+      float phaseOffset = band * 0.71;
+      float direction = mod(band, 2.0) < 1.0 ? 1.0 : -1.0;
+      float traveling = angle + direction * cycle * (1.0 + mod(band, 3.0)) + phaseOffset;
+      float lowWave = sin(traveling * (2.0 + mod(band, 3.0))) * (0.016 + band * 0.0007);
+      float mediumWave = sin(angle * (7.0 + mod(band, 5.0)) - cycle * (2.0 + mod(band, 4.0)) + phaseOffset) * (0.009 + turbulence * 0.009);
+      float highWave = sin(angle * (18.0 + mod(band, 4.0) * 3.0) + cycle * (3.0 + mod(band, 5.0))) * (0.0035 + turbulence * 0.004);
+      float localPulse = pow(max(0.0, sin(angle * 2.0 - cycle * (1.0 + mod(band, 3.0)) + phaseOffset)), 7.0);
+      float targetRadius = baseRadius + breathing + (band - 5.5) * 0.0085 + lowWave + mediumWave + highWave + localPulse * 0.014;
+      float distanceToBand = abs(radius - targetRadius);
+      float strandWidth = 0.0018 + mod(band, 4.0) * 0.00065;
+      float core = 1.0 - smoothstep(strandWidth, strandWidth + 0.0045, distanceToBand);
+      float halo = exp(-distanceToBand * distanceToBand * (900.0 - band * 28.0));
+      float broken = 0.28 + 0.72 * smoothstep(-0.42, 0.72, sin(angle * (3.0 + mod(band, 4.0)) + cycle * (1.0 + mod(band, 2.0)) + phaseOffset));
+      vec3 bandColor = mix(vec3(0.19, 0.30, 0.78), vec3(0.48, 0.92, 1.0), band / 11.0);
+      if (mod(band, 5.0) < 1.0) bandColor = mix(bandColor, vec3(0.57, 1.0, 0.76), 0.3);
+      if (mod(band, 4.0) < 1.0) bandColor = mix(bandColor, vec3(0.72, 0.52, 1.0), 0.42);
+      color += bandColor * (core * 0.48 + halo * 0.085) * broken * (0.55 + localPulse * 1.45);
+      color += vec3(0.83, 0.91, 1.0) * core * localPulse * 0.62;
+    }
+
+    float innerMask = smoothstep(baseRadius * 0.62, baseRadius * 0.84, radius);
+    float outerMask = 1.0 - smoothstep(baseRadius * 1.08, baseRadius * 1.34, radius);
+    return color * innerMask * outerMask * uIntensity;
+  }
+
   void main() {
     vec2 uv = vUv;
+    if (uMode == 5) {
+      gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+      return;
+    }
+    if (uMode == 6) {
+      vec3 wave = circleWave(uv);
+      gl_FragColor = vec4(vec3(1.0) - exp(-wave * 1.18), 1.0);
+      return;
+    }
     vec2 p = (uv - 0.5) * vec2(1.65, 1.0);
     p += uPointer * vec2(0.055, -0.04);
     float t = uTime * 0.14;
@@ -131,11 +181,99 @@ const fragmentShader = /* glsl */ `
   }
 `;
 
+const morphVertexShader = /* glsl */ `
+  precision highp float;
+  attribute vec3 aSphere;
+  attribute vec3 aTorus;
+  attribute vec3 aHelix;
+  attribute vec3 aScatter;
+  attribute vec3 aColor;
+  attribute float aDelay;
+  attribute float aSize;
+  uniform float uTime;
+  uniform float uMotion;
+  uniform float uScatterStrength;
+  uniform float uPointScale;
+  uniform float uCameraSpeed;
+  uniform float uLoopDuration;
+  uniform vec2 uPointer;
+  varying vec3 vColor;
+  varying float vGlow;
+
+  float quintic(float value) {
+    value = clamp(value, 0.0, 1.0);
+    return value * value * value * (value * (value * 6.0 - 15.0) + 10.0);
+  }
+
+  vec3 transitionShape(vec3 from, vec3 to, float start, float duration, float clock, float scatterPulse) {
+    float progress = clamp((clock - start) / duration, 0.0, 1.0);
+    progress = clamp(progress + (aDelay - 0.5) * 0.16 * sin(progress * 3.14159265), 0.0, 1.0);
+    float eased = quintic(progress);
+    float scatter = sin(progress * 3.14159265) * scatterPulse;
+    scatter *= smoothstep(0.0, 0.18, progress) * (1.0 - smoothstep(0.7, 1.0, progress));
+    vec3 noisyDirection = normalize(aScatter + sin(aScatter.yzx * 5.0 + clock * 0.7) * 0.18);
+    return mix(from, to, eased) + noisyDirection * scatter * uScatterStrength;
+  }
+
+  void main() {
+    float clock = mod(uTime, uLoopDuration);
+    vec3 positionNow = aSphere;
+    if (clock >= 2.5 && clock < 4.5) positionNow = transitionShape(aSphere, aTorus, 2.5, 2.0, clock, 1.0);
+    else if (clock >= 4.5 && clock < 6.0) positionNow = aTorus;
+    else if (clock >= 6.0 && clock < 8.5) positionNow = transitionShape(aTorus, aHelix, 6.0, 2.5, clock, 1.0);
+    else if (clock >= 8.5 && clock < 10.5) positionNow = aHelix;
+    else if (clock >= 10.5 && clock < 13.0) positionNow = transitionShape(aHelix, aSphere, 10.5, 2.5, clock, 1.0);
+    else if (clock >= 15.0) positionNow = transitionShape(aSphere, aSphere, 15.0, 3.7, clock, 0.72);
+
+    float orbit = uTime * uCameraSpeed;
+    float cosine = cos(orbit);
+    float sine = sin(orbit);
+    positionNow.xz = mat2(cosine, -sine, sine, cosine) * positionNow.xz;
+    positionNow.x += uPointer.x * 0.06 * uMotion;
+    positionNow.y += uPointer.y * 0.04 * uMotion;
+    vec4 viewPosition = modelViewMatrix * vec4(positionNow, 1.0);
+    gl_Position = projectionMatrix * viewPosition;
+    gl_PointSize = aSize * uPointScale * (7.0 / max(1.0, -viewPosition.z));
+    vColor = aColor;
+    vGlow = 0.75 + aSize * 0.08;
+  }
+`;
+
+const morphFragmentShader = /* glsl */ `
+  precision highp float;
+  varying vec3 vColor;
+  varying float vGlow;
+  uniform float uIntensity;
+  void main() {
+    vec2 centered = gl_PointCoord - 0.5;
+    float distanceFromCenter = length(centered);
+    if (distanceFromCenter > 0.5) discard;
+    float core = 1.0 - smoothstep(0.02, 0.18, distanceFromCenter);
+    float halo = 1.0 - smoothstep(0.08, 0.5, distanceFromCenter);
+    float alpha = (core * 0.72 + halo * 0.3) * vGlow * min(uIntensity, 1.2);
+    gl_FragColor = vec4(vColor * (0.72 + core * 0.62), alpha);
+  }
+`;
+
+export const particleMorphConfig = {
+  count: 2400,
+  sphereRadius: 2,
+  torusMajorRadius: 1.25,
+  torusTubeRadius: 0.35,
+  helixRadius: 0.9,
+  helixHeight: 2.8,
+  helixTurns: 6,
+  loopDuration: 18.7,
+  scatterStrength: 0.72,
+  cameraSpeed: 0.055,
+  colors: ["#ffffff", "#b8ddff", "#8aa8ff", "#a98cff", "#6ce9ff", "#8fffc1", "#ff9cda"],
+} as const;
+
 function cssColor(styles: CSSStyleDeclaration, name: string, fallback: string) {
   return styles.getPropertyValue(name).trim() || fallback;
 }
 
-const modeIndex: Record<BackgroundAnimation, number> = { harbor: 0, aurora: 1, constellation: 2, embers: 3, topography: 4 };
+const modeIndex: Record<BackgroundAnimation, number> = { harbor: 0, aurora: 1, constellation: 2, embers: 3, topography: 4, particleMorph: 5, circleWave: 6 };
 
 type MotionBackgroundProps = { animation: BackgroundAnimation; interaction: boolean; quality: GraphicsQuality };
 
@@ -180,6 +318,7 @@ export const MotionBackground = forwardRef<MotionBackgroundHandle, MotionBackgro
         uAccent: { value: new THREE.Color(cssColor(styles, "--accent", "#b08d57")) },
         uTrailColor: { value: new THREE.Color("#ffffff") },
         uTrail: { value: Array.from({ length: 18 }, () => new THREE.Vector3(-1, -1, 1)) },
+        uResolution: { value: new THREE.Vector2(1, 1) },
         uMode: { value: modeIndex[animation] },
       };
       const targets = {
@@ -188,6 +327,83 @@ export const MotionBackground = forwardRef<MotionBackgroundHandle, MotionBackgro
       const material = new THREE.ShaderMaterial({ vertexShader, fragmentShader, uniforms, depthWrite: false, depthTest: false });
       const plane = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
       scene.add(plane);
+
+      const morphScene = new THREE.Scene();
+      const morphCamera = new THREE.PerspectiveCamera(38, 1, 0.1, 20);
+      morphCamera.position.z = 7;
+      const morphCount = quality === "battery" ? 1800 : weakDevice ? 2100 : particleMorphConfig.count;
+      const spherePositions = new Float32Array(morphCount * 3);
+      const torusPositions = new Float32Array(morphCount * 3);
+      const helixPositions = new Float32Array(morphCount * 3);
+      const scatterDirections = new Float32Array(morphCount * 3);
+      const morphColors = new Float32Array(morphCount * 3);
+      const morphDelays = new Float32Array(morphCount);
+      const morphSizes = new Float32Array(morphCount);
+      const colorChoices = particleMorphConfig.colors;
+      let randomState = 0x51f15e;
+      const seededRandom = () => {
+        randomState = (Math.imul(randomState, 1664525) + 1013904223) >>> 0;
+        return randomState / 4294967296;
+      };
+      for (let index = 0; index < morphCount; index++) {
+        const offset = index * 3;
+        const fraction = (index + 0.5) / morphCount;
+        const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+        const sphereY = 1 - 2 * fraction;
+        const sphereRadiusAtY = Math.sqrt(Math.max(0, 1 - sphereY * sphereY));
+        const sphereAngle = goldenAngle * index;
+        spherePositions[offset] = Math.cos(sphereAngle) * sphereRadiusAtY * particleMorphConfig.sphereRadius;
+        spherePositions[offset + 1] = sphereY * particleMorphConfig.sphereRadius;
+        spherePositions[offset + 2] = Math.sin(sphereAngle) * sphereRadiusAtY * particleMorphConfig.sphereRadius;
+
+        const torusU = fraction * Math.PI * 2;
+        const torusV = (index * goldenAngle) % (Math.PI * 2);
+        const torusRadius = particleMorphConfig.torusMajorRadius + particleMorphConfig.torusTubeRadius * Math.cos(torusV);
+        torusPositions[offset] = torusRadius * Math.cos(torusU);
+        torusPositions[offset + 1] = torusRadius * Math.sin(torusU);
+        torusPositions[offset + 2] = particleMorphConfig.torusTubeRadius * Math.sin(torusV);
+
+        const helixAngle = fraction * Math.PI * 2 * particleMorphConfig.helixTurns;
+        const helixThickness = (seededRandom() - 0.5) * 0.22;
+        helixPositions[offset] = (particleMorphConfig.helixRadius + helixThickness) * Math.cos(helixAngle);
+        helixPositions[offset + 1] = (fraction - 0.5) * particleMorphConfig.helixHeight;
+        helixPositions[offset + 2] = (particleMorphConfig.helixRadius + helixThickness) * Math.sin(helixAngle);
+
+        const scatterTheta = seededRandom() * Math.PI * 2;
+        const scatterZ = seededRandom() * 2 - 1;
+        const scatterRadius = Math.sqrt(1 - scatterZ * scatterZ);
+        scatterDirections[offset] = Math.cos(scatterTheta) * scatterRadius;
+        scatterDirections[offset + 1] = scatterZ;
+        scatterDirections[offset + 2] = Math.sin(scatterTheta) * scatterRadius;
+        const color = new THREE.Color(colorChoices[Math.min(colorChoices.length - 1, Math.floor(seededRandom() ** 1.55 * colorChoices.length))]);
+        morphColors[offset] = color.r; morphColors[offset + 1] = color.g; morphColors[offset + 2] = color.b;
+        morphDelays[index] = seededRandom();
+        morphSizes[index] = 0.72 + seededRandom() * 0.68;
+      }
+      const morphGeometry = new THREE.BufferGeometry();
+      morphGeometry.setAttribute("position", new THREE.BufferAttribute(spherePositions, 3));
+      morphGeometry.setAttribute("aSphere", new THREE.BufferAttribute(spherePositions, 3));
+      morphGeometry.setAttribute("aTorus", new THREE.BufferAttribute(torusPositions, 3));
+      morphGeometry.setAttribute("aHelix", new THREE.BufferAttribute(helixPositions, 3));
+      morphGeometry.setAttribute("aScatter", new THREE.BufferAttribute(scatterDirections, 3));
+      morphGeometry.setAttribute("aColor", new THREE.BufferAttribute(morphColors, 3));
+      morphGeometry.setAttribute("aDelay", new THREE.BufferAttribute(morphDelays, 1));
+      morphGeometry.setAttribute("aSize", new THREE.BufferAttribute(morphSizes, 1));
+      const morphUniforms = {
+        uTime: { value: 0 }, uMotion: { value: 0.5 }, uIntensity: { value: 1 },
+        uScatterStrength: { value: particleMorphConfig.scatterStrength },
+        uPointScale: { value: quality === "battery" ? 7.5 : 9.5 },
+        uCameraSpeed: { value: particleMorphConfig.cameraSpeed },
+        uLoopDuration: { value: particleMorphConfig.loopDuration },
+        uPointer: { value: new THREE.Vector2() },
+      };
+      const morphMaterial = new THREE.ShaderMaterial({
+        vertexShader: morphVertexShader, fragmentShader: morphFragmentShader, uniforms: morphUniforms,
+        transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: true,
+      });
+      const morphParticles = new THREE.Points(morphGeometry, morphMaterial);
+      morphParticles.visible = animation === "particleMorph";
+      morphScene.add(morphParticles);
 
       const baseParticles = quality === "battery" ? 28 : weakDevice ? 48 : 90;
       const particleCount = animation === "topography" ? Math.round(baseParticles * 0.22) : baseParticles;
@@ -201,6 +417,7 @@ export const MotionBackground = forwardRef<MotionBackgroundHandle, MotionBackgro
       particlesGeometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
       const particlesMaterial = new THREE.PointsMaterial({ color: uniforms.uAccent.value, size: 0.018, transparent: true, opacity: 0.5, depthWrite: false });
       const particles = new THREE.Points(particlesGeometry, particlesMaterial);
+      particles.visible = animation !== "particleMorph" && animation !== "circleWave";
       scene.add(particles);
 
       const timer = new THREE.Timer();
@@ -225,7 +442,12 @@ export const MotionBackground = forwardRef<MotionBackgroundHandle, MotionBackgro
         uniforms.uGrain.value = Number(computed.getPropertyValue("--grain")) || 0;
         motionAmount = Number(computed.getPropertyValue("--motion")) || 0;
       };
-      const resize = () => renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+      const resize = () => {
+        renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+        uniforms.uResolution.value.set(canvas.clientWidth, canvas.clientHeight);
+        morphCamera.aspect = Math.max(0.35, canvas.clientWidth / Math.max(1, canvas.clientHeight));
+        morphCamera.updateProjectionMatrix();
+      };
       const movePointer = (event: PointerEvent) => {
         if (!interaction || motionAmount === 0 || touchDevice) return;
         pointer.set((event.clientX / window.innerWidth - 0.5) * 2, (event.clientY / window.innerHeight - 0.5) * 2);
@@ -248,16 +470,26 @@ export const MotionBackground = forwardRef<MotionBackgroundHandle, MotionBackgro
         uniforms.uGlow.value.lerp(targets.glow, 0.025); uniforms.uAccent.value.lerp(targets.accent, 0.025);
         particlesMaterial.color.lerp(targets.accent, 0.035);
         uniforms.uIntensity.value += (targets.intensity - uniforms.uIntensity.value) * 0.04;
-        uniforms.uTime.value = timer.getElapsed() * motionAmount;
+        const timelineScale = animation === "particleMorph" || animation === "circleWave" ? motionAmount * 2 : motionAmount;
+        uniforms.uTime.value = timer.getElapsed() * timelineScale;
+        morphUniforms.uTime.value = timer.getElapsed() * timelineScale;
+        morphUniforms.uMotion.value = motionAmount;
+        morphUniforms.uIntensity.value = uniforms.uIntensity.value;
+        morphUniforms.uPointer.value.copy(smoothPointer);
         const frameDelta = timer.getDelta();
         for (const point of trail) point.z = Math.min(1, point.z + frameDelta * 0.72);
         particles.rotation.z = uniforms.uTime.value * 0.012;
         particles.rotation.x = smoothPointer.y * 0.035;
         particles.rotation.y = smoothPointer.x * 0.035;
+        renderer.autoClear = false;
+        renderer.clear();
         renderer.render(scene, camera);
+        if (morphParticles.visible) { renderer.clearDepth(); renderer.render(morphScene, morphCamera); }
       };
       captureRef.current = () => {
-        renderer.render(scene, camera);
+        renderer.autoClear = false;
+        renderer.clear(); renderer.render(scene, camera);
+        if (morphParticles.visible) { renderer.clearDepth(); renderer.render(morphScene, morphCamera); }
         try { return canvas.toDataURL("image/png"); } catch { return null; }
       };
       const syncLoop = () => {
@@ -280,7 +512,7 @@ export const MotionBackground = forwardRef<MotionBackgroundHandle, MotionBackgro
         window.removeEventListener("resize", resize); window.removeEventListener("pointermove", movePointer); window.removeEventListener("pointerdown", pulse);
         document.removeEventListener("visibilitychange", syncLoop); reducedMotion.removeEventListener("change", syncLoop);
         captureRef.current = () => null;
-        timer.dispose(); particlesGeometry.dispose(); particlesMaterial.dispose(); plane.geometry.dispose(); material.dispose(); renderer.dispose();
+        timer.dispose(); particlesGeometry.dispose(); particlesMaterial.dispose(); morphGeometry.dispose(); morphMaterial.dispose(); plane.geometry.dispose(); material.dispose(); renderer.dispose();
       };
     });
 

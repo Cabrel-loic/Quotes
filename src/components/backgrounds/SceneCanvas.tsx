@@ -6,7 +6,7 @@ import type { DaybookPreferences } from "@/types/quote";
 
 export const SceneCanvas = forwardRef<MotionBackgroundHandle, { preferences: DaybookPreferences }>(function SceneCanvas({ preferences }, ref) {
   return (
-    <div className="scene-layer" aria-hidden="true">
+    <div className="scene-layer" data-scene={preferences.backgroundAnimation} aria-hidden="true">
       <MotionBackground ref={ref} animation={preferences.backgroundAnimation} interaction={preferences.backgroundInteraction} quality={preferences.graphicsQuality} />
       <div className="scene-vignette" />
       <div className="scene-grain" />

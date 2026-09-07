@@ -19,7 +19,7 @@ The project is a ground-up rebuild of an earlier single-file `daily-quote.html` 
 - Custom accent color
 - Multiple typeface pairings
 - Adjustable quote size
-- Five selectable procedural atmospheres: Harbor, Aurora, Topography, Constellation, and Embers
+- Seven selectable procedural atmospheres: Harbor, Aurora, Topography, Constellation, Embers, Particle Morph, and Circle Wave
 - Independent Immersive and Editorial quote layouts
 - Harbor motion is the default, with adjustable atmosphere and motion intensity
 - Persistent appearance preferences

@@ -33,7 +33,7 @@ export type FontPairing =
   | "modernist";
 
 export type EntranceAnimation = "stamp" | "fade" | "slide" | "typewriter";
-export type BackgroundAnimation = "harbor" | "aurora" | "constellation" | "embers" | "topography";
+export type BackgroundAnimation = "harbor" | "aurora" | "constellation" | "embers" | "topography" | "particleMorph" | "circleWave";
 export type QuoteLayout = "immersive" | "editorial";
 export type GraphicsQuality = "auto" | "balanced" | "battery";
 

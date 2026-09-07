@@ -1,13 +1,24 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useEffect, useRef } from "react";
 import type { QuoteMeaning } from "@/types/quote";
 
-export function MeaningExperience({ meaning, open, loading, source }: { meaning: QuoteMeaning; open: boolean; loading: boolean; source: "groq" | "cache" | "local" }) {
+export function MeaningExperience({ meaning, open, loading, source, onClose }: { meaning: QuoteMeaning; open: boolean; loading: boolean; source: "groq" | "cache" | "local"; onClose: () => void }) {
   const reduceMotion = useReducedMotion();
+  const sectionRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && !sectionRef.current?.contains(target)) onClose();
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
+  }, [open, onClose]);
   return (
     <AnimatePresence initial={false}>
-      {open ? <motion.section
+      {open ? <motion.section ref={sectionRef}
         id="meaning-section"
         aria-labelledby="meaning-title"
         aria-busy={loading}
