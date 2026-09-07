@@ -41,6 +41,7 @@ export function ExportPanel({ open, quote, settings, capturedBackground, onClose
   const [fileFormat, setFileFormat] = useState<FormatName>("png");
   const [includeDate, setIncludeDate] = useState(true);
   const [includeMark, setIncludeMark] = useState(true);
+  const [quoteScale, setQuoteScale] = useState(settings.quoteSize);
   const [exporting, setExporting] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -58,22 +59,23 @@ export function ExportPanel({ open, quote, settings, capturedBackground, onClose
     if (!open || !quote) return;
     let cancelled = false;
     const scale = Math.min(1, 960 / Math.max(selected.width, selected.height));
+    const exportSettings = { ...settings, quoteSize: quoteScale };
     void Promise.resolve().then(() => { if (!cancelled) setPreviewLoading(true); return document.fonts.ready; }).then(() => renderExport(
-      Math.round(selected.width * scale), Math.round(selected.height * scale), quote, settings, includeDate, includeMark, capturedBackground,
+      Math.round(selected.width * scale), Math.round(selected.height * scale), quote, exportSettings, includeDate, includeMark, capturedBackground,
     )).then((canvas) => {
       if (cancelled) return;
       setPreviewUrl(canvas.toDataURL(format.mime, format.quality));
       setPreviewLoading(false);
     }).catch(() => { if (!cancelled) { setPreviewLoading(false); setExportStatus("Preview could not be rendered in this browser."); } });
     return () => { cancelled = true; };
-  }, [open, quote, settings, preset, selected.width, selected.height, includeDate, includeMark, capturedBackground, format.mime, format.quality]);
+  }, [open, quote, settings, quoteScale, preset, selected.width, selected.height, includeDate, includeMark, capturedBackground, format.mime, format.quality]);
 
   async function download() {
     if (!quote) return;
     setExporting(true); setExportStatus("");
     try {
       await document.fonts.ready;
-      const canvas = await renderExport(selected.width, selected.height, quote, settings, includeDate, includeMark, capturedBackground);
+      const canvas = await renderExport(selected.width, selected.height, quote, { ...settings, quoteSize: quoteScale }, includeDate, includeMark, capturedBackground);
       canvas.toBlob((blob) => {
         if (!blob) { setExportStatus("This browser could not create the image."); setExporting(false); return; }
         const actualFormat = Object.values(fileFormats).find((item) => item.mime === blob.type) ?? fileFormats.png;
@@ -95,8 +97,9 @@ export function ExportPanel({ open, quote, settings, capturedBackground, onClose
         <div className="export-controls">
           <fieldset><legend>Canvas</legend><div className="export-preset-grid">{Object.entries(presets).map(([value, item]) => <button key={value} aria-pressed={preset === value} onClick={() => setPreset(value as PresetName)}><strong>{item.label}</strong><small>{item.dimensions}</small></button>)}</div></fieldset>
           <fieldset><legend>File format</legend><div className="export-format-row">{Object.entries(fileFormats).map(([value, item]) => <button key={value} aria-pressed={fileFormat === value} onClick={() => setFileFormat(value as FormatName)}><strong>{item.label}</strong><small>{item.description}</small></button>)}</div></fieldset>
+          <fieldset><legend>Quote scale</legend><label className="export-range"><span>Text size <output>{quoteScale}px</output></span><input className="range range-xs" type="range" min="18" max="48" value={quoteScale} onChange={(event) => setQuoteScale(Number(event.target.value))} /></label></fieldset>
           <fieldset><legend>Details</legend><label className="export-check"><input className="checkbox checkbox-sm" type="checkbox" checked={includeDate} onChange={(event) => setIncludeDate(event.target.checked)} /> Include date</label><label className="export-check"><input className="checkbox checkbox-sm" type="checkbox" checked={includeMark} onChange={(event) => setIncludeMark(event.target.checked)} /> Include quotation mark</label></fieldset>
-          <div className="export-summary"><span>{settings.layout}</span><i /> <span>{settings.fonts}</span><i /> <span>{settings.quoteSize}px</span></div>
+          <div className="export-summary"><span>{settings.layout}</span><i /> <span>{settings.fonts}</span><i /> <span>{quoteScale}px</span></div>
         </div>
         <div className="export-preview-column">
           <div className="export-preview-stage">

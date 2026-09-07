@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { useState, type ReactNode } from "react";
 
 type Props = {
@@ -11,7 +11,6 @@ type Props = {
 
 export function QuoteActions(props: Props) {
   const [copied, setCopied] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
   const copy = async () => {
     if (!await props.onCopy()) return;
     setCopied(true); window.setTimeout(() => setCopied(false), 1800);
@@ -23,14 +22,15 @@ export function QuoteActions(props: Props) {
       {props.isRandom ? <ActionButton className="hidden sm:inline-flex" icon={<ReturnIcon />} onClick={props.onToday}>Today</ActionButton> : null}
       <ActionButton icon={copied ? <CheckIcon /> : <CopyIcon />} active={copied} onClick={copy}>{copied ? "Copied" : "Copy"}</ActionButton>
       <ActionButton className="hidden sm:inline-flex" icon={<DownloadIcon />} onClick={props.onExport}>Export</ActionButton>
-      <div className="relative sm:hidden">
+      {/* Mobile More actions are temporarily disabled. */}
+      {/* <div className="relative sm:hidden">
         <ActionButton icon={<MoreIcon />} expanded={moreOpen} controls="mobile-more-menu" label="More actions" onClick={() => setMoreOpen((value) => !value)}>More</ActionButton>
         <AnimatePresence>{moreOpen ? <motion.div id="mobile-more-menu" className="mobile-more-menu" initial={{ opacity: 0, y: 8, scale: .96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 5 }}>
           {props.isRandom ? <button onClick={() => { props.onToday(); setMoreOpen(false); }}><ReturnIcon /> Today’s quote</button> : null}
           <button onClick={() => { props.onExport(); setMoreOpen(false); }}><DownloadIcon /> Download HD</button>
           <button onClick={() => { props.onSettings(); setMoreOpen(false); }}><SettingsIcon /> Appearance</button>
         </motion.div> : null}</AnimatePresence>
-      </div>
+      </div> */}
     </motion.nav>
   );
 }
@@ -52,5 +52,3 @@ function ReturnIcon() { return <Icon><path d="m9 14-4-4 4-4"/><path d="M5 10h9a5
 function CopyIcon() { return <Icon><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></Icon>; }
 function CheckIcon() { return <Icon><path d="m5 12 4 4L19 6"/></Icon>; }
 function DownloadIcon() { return <Icon><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></Icon>; }
-function MoreIcon() { return <Icon><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></Icon>; }
-function SettingsIcon() { return <Icon><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1A7 7 0 0 0 15 6l-.4-2.6h-4L10 6a7 7 0 0 0-1.5 1.1l-2.4-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1A7 7 0 0 0 10 18l.5 2.6h4L15 18a7 7 0 0 0 1.5-1.1l2.4 1 2-3.4-2-1.5a7 7 0 0 0 .1-1Z"/></Icon>; }
